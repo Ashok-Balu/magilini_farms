@@ -8,6 +8,7 @@
     "dev": "NODE_ENV=development tsx watch src/bootstrap.ts",
     "test": "NODE_ENV=test tsx src/bootstrap.ts",
     "start": "NODE_ENV=production tsx src/bootstrap.ts",
+    "prebuild": "npm install --include=dev",
     "build": "tsc -p tsconfig.json",
     "seed": "tsx src/scripts/seed-safe.ts"
   },
