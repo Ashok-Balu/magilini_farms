@@ -111,17 +111,23 @@ const nodeEnv = normalizeNodeEnv(process.env.NODE_ENV)
 let envFileName = ENV_FILE_BY_NODE_ENV[nodeEnv]
 let envFilePath = path.join(backendRoot, envFileName)
 
-// Fallback to .env if NODE_ENV-specific file doesn't exist (e.g., in production deployment)
-if (!fs.existsSync(envFilePath)) {
+// Try to load env file if it exists (for development/local deployments)
+// In production (Render, etc.), env vars should be set directly in the platform
+if (fs.existsSync(envFilePath)) {
+  dotenv.config({ path: envFilePath, override: false })
+} else if (nodeEnv !== 'production') {
+  // Fallback to .env for development/test if NODE_ENV-specific file doesn't exist
   envFileName = '.env'
   envFilePath = path.join(backendRoot, envFileName)
   
-  if (!fs.existsSync(envFilePath)) {
+  if (fs.existsSync(envFilePath)) {
+    dotenv.config({ path: envFilePath, override: false })
+  } else {
     throw new Error(`No environment file found. Tried: ${ENV_FILE_BY_NODE_ENV[nodeEnv]}, .env`)
   }
 }
+// If production and no file found, use environment variables (from platform like Render)
 
-dotenv.config({ path: envFilePath, override: false })
 process.env.NODE_ENV = nodeEnv
 
 const envSchema = z.object({
