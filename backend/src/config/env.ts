@@ -108,11 +108,17 @@ const mongoHostFromUri = (uri: string): string => {
 }
 
 const nodeEnv = normalizeNodeEnv(process.env.NODE_ENV)
-const envFileName = ENV_FILE_BY_NODE_ENV[nodeEnv]
-const envFilePath = path.join(backendRoot, envFileName)
+let envFileName = ENV_FILE_BY_NODE_ENV[nodeEnv]
+let envFilePath = path.join(backendRoot, envFileName)
 
+// Fallback to .env if NODE_ENV-specific file doesn't exist (e.g., in production deployment)
 if (!fs.existsSync(envFilePath)) {
-  throw new Error(`Environment file not found for NODE_ENV=${nodeEnv}: ${envFileName}`)
+  envFileName = '.env'
+  envFilePath = path.join(backendRoot, envFileName)
+  
+  if (!fs.existsSync(envFilePath)) {
+    throw new Error(`No environment file found. Tried: ${ENV_FILE_BY_NODE_ENV[nodeEnv]}, .env`)
+  }
 }
 
 dotenv.config({ path: envFilePath, override: false })
