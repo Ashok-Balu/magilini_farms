@@ -1,0 +1,53 @@
+{
+  "name": "magilini-farms-backend",
+  "version": "1.0.0",
+  "description": "MagiliniFarms Backend API",
+  "main": "src/bootstrap.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "NODE_ENV=development tsx watch src/bootstrap.ts",
+    "test": "NODE_ENV=test tsx src/bootstrap.ts",
+    "start": "NODE_ENV=production tsx src/bootstrap.ts",
+    "build": "tsc -p tsconfig.json",
+    "seed": "tsx src/scripts/seed-safe.ts"
+  },
+  "dependencies": {
+    "@types/compression": "^1.8.1",
+    "axios": "^1.6.2",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.41.0",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.0",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "multer-storage-cloudinary": "^4.0.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.7",
+    "pdfkit": "^0.14.0",
+    "razorpay": "^2.9.2",
+    "slugify": "^1.6.6",
+    "twilio": "^4.20.0",
+    "xss": "^1.0.15",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^24.0.7",
+    "@types/node-cron": "^3.0.11",
+    "nodemon": "^3.0.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2"
+  }
+}
