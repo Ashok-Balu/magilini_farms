@@ -1,6 +1,7 @@
 import express from 'express'
 import type { Request, Response } from 'express'
 import cors from 'cors'
+import type { CorsOptions } from 'cors'
 import helmet from 'helmet'
 import compression from 'compression'
 import cookieParser from 'cookie-parser'
@@ -51,14 +52,14 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }))
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin) return callback(null, true)
     if (config.corsOrigins.includes(origin)) return callback(null, true)
     return callback(new Error('CORS origin not allowed'))
   },
   credentials: true,
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS']
-}))
+} as CorsOptions))
 app.use(compression())
 app.use(cookieParser())
 app.use(express.json({ limit: '10mb' }))
