@@ -144,12 +144,20 @@ export const verifyOtp = asyncHandler(async (req, res) => {
   const verificationToken = signVerificationToken(phone)
   setVerificationCookie(res, verificationToken)
   logAuthActivity('otp_verified_new_user', phone, { ip: req.ip, userAgent: req.headers['user-agent'] })
-
-  return res.json({
+  // Return response. In rare debugging scenarios you can enable
+  // DEBUG_OTP_IN_BODY=true to receive the `otp_ticket` in the JSON
+  // body so the frontend can continue while cookie issues are resolved.
+  const responsePayload = {
     success: true,
     needsProfileCompletion: true,
     message: 'OTP verified. Please complete your profile.'
-  })
+  }
+
+  if (String(process.env.DEBUG_OTP_IN_BODY || '').toLowerCase() === 'true') {
+    responsePayload.otp_ticket = verificationToken
+  }
+
+  return res.json(responsePayload)
 })
 
 // POST /api/auth/complete-profile
