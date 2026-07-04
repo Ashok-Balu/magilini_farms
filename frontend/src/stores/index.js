@@ -6,7 +6,7 @@ import api from '@/lib/api.js'
 export const useAuthStore = defineStore('auth', () => {
   const user              = ref(null)
   const loading           = ref(false)
-  const verificationToken = ref(null)
+  const verificationToken = ref(localStorage.getItem('nm_verification_token') || null)
 
   const isLoggedIn = computed(() => !!user.value)
   const isAdmin    = computed(() => user.value?.role === 'admin')
@@ -18,7 +18,6 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = data.user
     } catch {
       user.value = null
-      verificationToken.value = null
     }
   }
 
@@ -44,7 +43,10 @@ export const useAuthStore = defineStore('auth', () => {
       if (email) payload.email = email
       const { data } = await api.post('/auth/verify-otp', payload)
       if (data.user) user.value = data.user
-      if (data.otp_ticket) verificationToken.value = data.otp_ticket
+      if (data.otp_ticket) {
+        verificationToken.value = data.otp_ticket
+        localStorage.setItem('nm_verification_token', data.otp_ticket)
+      }
       return { success: true, ...data }
     } catch (err) {
       return { success: false, message: err.response?.data?.message || 'Invalid OTP.' }
@@ -69,6 +71,7 @@ export const useAuthStore = defineStore('auth', () => {
       const { data } = await api.post('/auth/complete-profile', profileData, options)
       user.value = data.user
       verificationToken.value = null
+      localStorage.removeItem('nm_verification_token')
       return { success: true }
     } catch (err) {
       return { success: false, message: err.response?.data?.message || 'Failed to update profile.' }
@@ -91,6 +94,8 @@ export const useAuthStore = defineStore('auth', () => {
       try { await api.post('/auth/logout') } catch { /* ignore */ }
     }
     user.value = null
+    verificationToken.value = null
+    localStorage.removeItem('nm_verification_token')
   }
 
   return {
