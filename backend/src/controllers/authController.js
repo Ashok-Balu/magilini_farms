@@ -28,45 +28,51 @@ const logAuthActivity = (event, phone, details = {}) => {
 
 // POST /api/auth/send-otp
 export const sendOtp = asyncHandler(async (req, res) => {
-  const phone = normalizePhone(req.body.phone)
-  if (!isValidPhone(phone)) {
-    return res.status(400).json({ success: false, message: 'Enter a valid 10-digit mobile number.' })
-  }
-
-  const blockedUser = await User.findOne({ phone, isBlocked: true })
-  if (blockedUser) {
-    return res.status(403).json({ success: false, message: 'Your account has been blocked. Please contact support.' })
-  }
-
-  if (otpConfig.rateLimitEnabled) {
-    const requestWindowStart = new Date(Date.now() - otpConfig.windowMs)
-    const requestCount = await OtpRequest.countRecentRequests(phone, requestWindowStart)
-    if (requestCount >= otpConfig.maxRequests) {
-      return res.status(429).json({ success: false, message: 'Too many OTP requests. Please try again later.' })
-    }
-  }
-
-  const otp = generateOTP()
-  const otpRecord = await Otp.createOtp(phone, otp, otpConfig.expiryMinutes)
-  const requestRecord = otpConfig.rateLimitEnabled
-    ? await OtpRequest.recordRequest(phone, otpConfig.windowMs)
-    : null
-
   try {
-    await otpService.sendOTP(phone, otp, otpConfig.expiryMinutes)
+    const phone = normalizePhone(req.body.phone)
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid 10-digit mobile number.' })
+    }
+
+    const blockedUser = await User.findOne({ phone, isBlocked: true })
+    if (blockedUser) {
+      return res.status(403).json({ success: false, message: 'Your account has been blocked. Please contact support.' })
+    }
+
+    if (otpConfig.rateLimitEnabled) {
+      const requestWindowStart = new Date(Date.now() - otpConfig.windowMs)
+      const requestCount = await OtpRequest.countRecentRequests(phone, requestWindowStart)
+      if (requestCount >= otpConfig.maxRequests) {
+        return res.status(429).json({ success: false, message: 'Too many OTP requests. Please try again later.' })
+      }
+    }
+
+    const otp = generateOTP()
+    const otpRecord = await Otp.createOtp(phone, otp, otpConfig.expiryMinutes)
+    const requestRecord = otpConfig.rateLimitEnabled
+      ? await OtpRequest.recordRequest(phone, otpConfig.windowMs)
+      : null
+
+    try {
+      await otpService.sendOTP(phone, otp, otpConfig.expiryMinutes)
+    } catch (err) {
+      logger.error('OTP send failed', { phone, error: err.message, stack: err.stack })
+      await Otp.deleteMany({ phone })
+      if (requestRecord?._id) await OtpRequest.findByIdAndDelete(requestRecord._id)
+      return res.status(500).json({ success: false, message: 'Failed to send OTP. Please try again.' })
+    }
+
+    logAuthActivity('otp_sent', phone, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      otpId: otpRecord._id.toString()
+    })
+
+    res.json({ success: true, message: `OTP sent to +91 ${phone}` })
   } catch (err) {
-    await Otp.deleteMany({ phone })
-    if (requestRecord?._id) await OtpRequest.findByIdAndDelete(requestRecord._id)
+    logger.error('Send OTP endpoint error', { error: err.message, stack: err.stack })
     throw err
   }
-
-  logAuthActivity('otp_sent', phone, {
-    ip: req.ip,
-    userAgent: req.headers['user-agent'],
-    otpId: otpRecord._id.toString()
-  })
-
-  res.json({ success: true, message: `OTP sent to +91 ${phone}` })
 })
 
 // POST /api/auth/verify-otp

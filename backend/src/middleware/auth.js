@@ -5,7 +5,9 @@ import { errorResponse } from '../utils/response.js'
 const cookieBaseOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  path: '/',
+  domain: process.env.NODE_ENV === 'production' ? undefined : 'localhost'
 }
 
 export const protect = async (req, res, next) => {

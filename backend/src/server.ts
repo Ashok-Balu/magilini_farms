@@ -60,7 +60,10 @@ app.use(cors({
     return callback(error, false)
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Type', 'X-Total-Count'],
+  maxAge: 86400
 } as CorsOptions))
 app.use(compression())
 app.use(cookieParser())
