@@ -19,8 +19,13 @@ const api = axios.create({
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401 && !err.config?.url?.includes('/auth/logout')) {
-      // Clear auth and redirect to login
+    const requestUrl = String(err.config?.url || '')
+    const isAuthMeRequest = requestUrl.includes('/auth/me')
+    const isLogoutRequest = requestUrl.includes('/auth/logout')
+
+    if (err.response?.status === 401 && !isLogoutRequest && !isAuthMeRequest) {
+      // Clear auth and redirect to login only for protected actions,
+      // not for the initial /auth/me auth-check request.
       window.dispatchEvent(new CustomEvent('auth:expired'))
     }
     return Promise.reject(err)
