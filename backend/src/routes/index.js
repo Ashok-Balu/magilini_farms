@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { logger } from '../utils/logger.js'
 import { protect, adminOnly, customerOnly, allowSessionOrVerification } from '../middleware/auth.js'
 import { otpLimiter, loginLimiter, apiLimiter, paymentLimiter } from '../middleware/rateLimiter.js'
 import { uploadProductImages, uploadComplaintPhotos } from '../config/cloudinary.js'
@@ -34,6 +35,15 @@ const router = Router()
 router.post('/auth/send-otp',         otpLimiter, validateRequest(authSendOtpSchema), auth.sendOtp)
 router.post('/auth/verify-otp',       loginLimiter, validateRequest(authVerifyOtpSchema), auth.verifyOtp)
 router.post('/auth/dev/clear-otp',    auth.clearDevOtpRecords)
+// Temporary debug endpoint: returns cookies sent by the client
+router.get('/debug/cookies', apiLimiter, (req, res) => {
+  try {
+    logger.info('Debug cookies request', { ip: req.ip, cookies: req.cookies || {}, origin: req.headers.origin })
+  } catch (err) {
+    // ignore logging errors
+  }
+  res.json({ success: true, cookies: req.cookies || {} })
+})
 router.post('/auth/complete-profile', allowSessionOrVerification, validateRequest(authCompleteProfileSchema), auth.completeProfile)
 router.post('/auth/admin-login',      loginLimiter, validateRequest(adminLoginSchema), auth.adminLogin)
 router.get ('/auth/me',               protect,       auth.getMe)
