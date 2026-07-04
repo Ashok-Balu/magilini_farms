@@ -108,3 +108,6 @@ GET /api/products/top-selling?limit=8 200 89.591 ms
 {"timestamp":"2026-07-04T08:58:09.020Z","level":"INFO","message":"Server startup complete","environment":"development","port":5000,"apiBaseUrl":"http://localhost:5000/api","frontendUrl":"http://localhost:5173","trustProxy":false,"logFile":"development.log"}
 {"timestamp":"2026-07-04T08:59:51.737Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
 {"timestamp":"2026-07-04T08:59:52.399Z","level":"INFO","message":"Server startup complete","environment":"development","port":5000,"apiBaseUrl":"http://localhost:5000/api","frontendUrl":"http://localhost:5173","trustProxy":false,"logFile":"development.log"}
+GET /api/auth/me 401 1755.394 ms
+GET /api/auth/me 401 45.969 ms
+GET /api/auth/me 401 33.603 ms

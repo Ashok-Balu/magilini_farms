@@ -1,9 +1,18 @@
 import axios from 'axios'
 
+const rawApiUrl = String(import.meta.env.VITE_API_URL || '/api').trim()
+const normalizeApiUrl = (url) => {
+  if (!url) return '/api'
+  const trimmed = url.replace(/\/+$|\s+/g, '')
+  if (trimmed === '/api') return '/api'
+  if (trimmed.endsWith('/api')) return trimmed
+  return `${trimmed}/api`
+}
+
 const api = axios.create({
-  baseURL:         import.meta.env.VITE_API_URL || '/api',
+  baseURL: normalizeApiUrl(rawApiUrl),
   withCredentials: true,
-  headers:         { 'Content-Type': 'application/json' }
+  headers: { 'Content-Type': 'application/json' }
 })
 
 // Response interceptor — handle auth errors globally
