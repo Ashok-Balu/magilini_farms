@@ -80,3 +80,31 @@ GET /api/admin/customers?search=&page=1&limit=20 200 121.259 ms
 GET /api/admin/orders?page=1&limit=20&search=&status=&paymentStatus=&deliveryType=&customerName=&phone=&orderNumber=&dateFrom=&dateTo= 200 152.256 ms
 GET /api/admin/orders/6a3e4fbb2752a5f0c96b3540 304 87.356 ms
 {"timestamp":"2026-07-01T12:30:33.382Z","level":"ERROR","message":"Set ENABLE_SEED=true before running.","environment":"development","database":"magilinifarms_dev"}
+{"timestamp":"2026-07-04T08:48:18.334Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:48:18.743Z","level":"INFO","message":"Server startup complete","environment":"development","port":5000,"apiBaseUrl":"http://localhost:5000/api","frontendUrl":"http://localhost:5173","trustProxy":false,"logFile":"development.log"}
+{"timestamp":"2026-07-04T08:48:24.159Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+GET /api/auth/me 401 156.302 ms
+GET /api/auth/me 401 2.039 ms
+GET /api/auth/me 401 1.809 ms
+{"timestamp":"2026-07-04T08:48:49.614Z","level":"INFO","message":"Development OTP generated","phone":"9943996614","otp":9238,"expiryMinutes":10,"mode":"console"}
+{"timestamp":"2026-07-04T08:48:49.627Z","level":"INFO","message":"Auth activity","scope":"auth","event":"otp_sent","phone":"9943996614","ip":"::1","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36","otpId":"6a48c8f163e08d78916a4ef5"}
+POST /api/auth/send-otp 200 317.757 ms
+{"timestamp":"2026-07-04T08:49:06.615Z","level":"INFO","message":"Auth activity","scope":"auth","event":"otp_verified_existing_user","phone":"9943996614","userId":"6a3ce180f10b3ba3a0d62739","ip":"::1","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"}
+POST /api/auth/verify-otp 200 214.070 ms
+GET /api/categories 200 55.782 ms
+GET /api/products/featured 200 167.167 ms
+GET /api/products/top-selling?limit=8 200 89.591 ms
+{"timestamp":"2026-07-04T08:50:53.378Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:50:54.051Z","level":"INFO","message":"Server startup complete","environment":"development","port":5000,"apiBaseUrl":"http://localhost:5000/api","frontendUrl":"http://localhost:5173","trustProxy":false,"logFile":"development.log"}
+{"timestamp":"2026-07-04T08:52:11.301Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:52:11.944Z","level":"ERROR","message":"Database already contains data. Seeding cancelled.","environment":"development","database":"magilinifarms_dev"}
+{"timestamp":"2026-07-04T08:52:38.259Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:52:39.977Z","level":"INFO","message":"Seed execution completed","environment":"development","database":"magilinifarms_dev","mode":"FORCE + CLEAR"}
+{"timestamp":"2026-07-04T08:53:06.425Z","level":"INFO","message":"Database connected","environment":"test","database":"magilinifarms_test","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:53:08.351Z","level":"INFO","message":"Seed execution completed","environment":"test","database":"magilinifarms_test","mode":"FORCE + CLEAR"}
+{"timestamp":"2026-07-04T08:54:18.275Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:54:18.791Z","level":"INFO","message":"Server startup complete","environment":"development","port":5000,"apiBaseUrl":"http://localhost:5000/api","frontendUrl":"http://localhost:5173","trustProxy":false,"logFile":"development.log"}
+{"timestamp":"2026-07-04T08:58:08.592Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:58:09.020Z","level":"INFO","message":"Server startup complete","environment":"development","port":5000,"apiBaseUrl":"http://localhost:5000/api","frontendUrl":"http://localhost:5173","trustProxy":false,"logFile":"development.log"}
+{"timestamp":"2026-07-04T08:59:51.737Z","level":"INFO","message":"Database connected","environment":"development","database":"magilinifarms_dev","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:59:52.399Z","level":"INFO","message":"Server startup complete","environment":"development","port":5000,"apiBaseUrl":"http://localhost:5000/api","frontendUrl":"http://localhost:5173","trustProxy":false,"logFile":"development.log"}

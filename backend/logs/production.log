@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-04T08:54:18.829Z","level":"INFO","message":"Database connected","environment":"production","database":"magilinifarms_prod","mongoHost":"magilinifarms.on4cdmb.mongodb.net"}
+{"timestamp":"2026-07-04T08:54:20.487Z","level":"INFO","message":"Seed execution completed","environment":"production","database":"magilinifarms_prod","mode":"FORCE + CLEAR"}

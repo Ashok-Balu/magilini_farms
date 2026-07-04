@@ -5,9 +5,9 @@
   "main": "src/bootstrap.ts",
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development tsx watch src/bootstrap.ts",
-    "test": "NODE_ENV=test tsx src/bootstrap.ts",
-    "start": "NODE_ENV=production tsx src/bootstrap.ts",
+    "dev": "cross-env NODE_ENV=development tsx watch src/bootstrap.ts",
+    "test": "cross-env NODE_ENV=test tsx src/bootstrap.ts",
+    "start": "cross-env NODE_ENV=production tsx src/bootstrap.ts",
     "prebuild": "npm install --include=dev",
     "build": "tsc -p tsconfig.json",
     "seed": "tsx src/scripts/seed-safe.ts"
@@ -47,6 +47,7 @@
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.0.7",
     "@types/node-cron": "^3.0.11",
+    "cross-env": "^7.0.3",
     "nodemon": "^3.0.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2"

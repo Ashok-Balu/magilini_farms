@@ -1,3 +1,4 @@
+import dns from 'dns'
 import fs from 'fs'
 import path from 'path'
 import dotenv from 'dotenv'
@@ -111,6 +112,18 @@ const nodeEnv = normalizeNodeEnv(process.env.NODE_ENV)
 let envFileName = ENV_FILE_BY_NODE_ENV[nodeEnv]
 let envFilePath = path.join(backendRoot, envFileName)
 
+const setPublicDnsServersIfNeeded = (): void => {
+  const mongoUri = process.env.MONGO_URI?.trim() || ''
+  if (!mongoUri.startsWith('mongodb+srv://')) return
+
+  const currentDnsServers = dns.getServers()
+  if (currentDnsServers.includes('8.8.8.8') || currentDnsServers.includes('1.1.1.1')) return
+
+  dns.setServers(['8.8.8.8', '1.1.1.1'])
+}
+
+setPublicDnsServersIfNeeded()
+
 // Try to load env file if it exists (for development/local deployments)
 // In production (Render, etc.), env vars should be set directly in the platform
 if (fs.existsSync(envFilePath)) {
@@ -126,8 +139,10 @@ if (fs.existsSync(envFilePath)) {
     throw new Error(`No environment file found. Tried: ${ENV_FILE_BY_NODE_ENV[nodeEnv]}, .env`)
   }
 }
-// If production and no file found, use environment variables (from platform like Render)
 
+setPublicDnsServersIfNeeded()
+
+// If production and no file found, use environment variables (from platform like Render)
 process.env.NODE_ENV = nodeEnv
 
 const envSchema = z.object({
@@ -189,9 +204,11 @@ const appVersion = fs.existsSync(packageJsonPath)
   ? JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).version || '1.0.0'
   : '1.0.0'
 
+const normalizeOrigin = (origin: string): string => origin.trim().replace(/\/+$|\s+/g, '')
+
 const corsOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '')
   .split(',')
-  .map((origin) => origin.trim())
+  .map(normalizeOrigin)
   .filter(Boolean)
 
 const config: AppConfig = Object.freeze({

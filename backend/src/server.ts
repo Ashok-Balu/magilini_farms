@@ -55,7 +55,9 @@ app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin) return callback(null, true)
     if (config.corsOrigins.includes(origin)) return callback(null, true)
-    return callback(new Error('CORS origin not allowed'))
+    const error = new Error('CORS origin not allowed')
+    ;(error as any).status = 403
+    return callback(error, false)
   },
   credentials: true,
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS']
@@ -153,6 +155,7 @@ app.listen(PORT, () => {
   console.log(`Server      : ${config.apiBaseUrl.replace(/\/api\/?$/, '')}`)
   console.log('MongoDB     : Connected')
   console.log('Seed        : Disabled')
+  console.log(`CORS Origins : ${config.corsOrigins.join(', ') || 'none'}`)
   console.log(`OTP Mode    : ${otpMode}`)
   console.log('========================================')
 

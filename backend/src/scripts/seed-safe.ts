@@ -3,7 +3,20 @@ import { connectDatabase, disconnectDatabase } from '../config/database.js'
 import Category from '../models/Category.js'
 import Product from '../models/Product.js'
 import User from '../models/User.js'
-import { Coupon, Pincode } from '../models/index.js'
+import Order from '../models/Order.js'
+import Otp from '../models/Otp.js'
+import OtpRequest from '../models/OtpRequest.js'
+import {
+  Coupon,
+  Pincode,
+  BusinessHours,
+  StockLog,
+  BulkEnquiry,
+  NotifyMe,
+  PaymentTransaction,
+  PaymentWebhookEvent,
+  Complaint
+} from '../models/index.js'
 import { logger } from '../utils/logger.js'
 
 type SeedCategory = {
@@ -58,6 +71,15 @@ type SeedPincode = {
   isActive: boolean
 }
 
+type SeedBusinessHours = {
+  day: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+  isOpen: boolean
+  openTime: string
+  closeTime: string
+  pickupOpenTime: string
+  pickupCloseTime: string
+}
+
 class SeedSafetyError extends Error {
   constructor(message: string) {
     super(message)
@@ -68,6 +90,7 @@ class SeedSafetyError extends Error {
 const args = new Set(process.argv.slice(2))
 const hasForce = args.has('--force')
 const hasClear = args.has('--clear')
+const allowProd = args.has('--allow-prod')
 
 const SEED_CATEGORIES: SeedCategory[] = [
   {
@@ -91,9 +114,9 @@ const SEED_PRODUCTS: SeedProduct[] = [
     name: 'Premium Alphonso Mango',
     slug: 'premium-alphonso-mango',
     categorySlug: 'mangoes',
-    description: 'Naturally ripened Alphonso mangoes sourced directly from our farm.',
+    description: 'Naturally ripened Alphonso mangoes sourced directly from our farm. No carbide used.',
     keyPoints: ['No carbide ripening', 'Farm direct', 'Hand sorted quality'],
-    tags: ['alphonso', 'seasonal'],
+    tags: ['alphonso', 'seasonal', 'premium'],
     minimumQty: 1,
     isFeatured: true,
     isActive: true,
@@ -104,16 +127,90 @@ const SEED_PRODUCTS: SeedProduct[] = [
         mrp: 349,
         stock: 100,
         isAvailable: true
+      },
+      {
+        weight: '2 kg',
+        price: 549,
+        mrp: 649,
+        stock: 80,
+        isAvailable: true
       }
     ],
     images: [
       {
         url: 'https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&w=1200&q=80',
-        publicId: 'seed/premium-alphonso-mango-1'
+        publicId: 'seed/alphonso-1'
+      }
+    ]
+  },
+  {
+    name: 'Organic Farm Fresh Greens',
+    slug: 'organic-farm-fresh-greens',
+    categorySlug: 'farm-fresh',
+    description: 'Fresh organic vegetables harvested daily from our certified organic farm.',
+    keyPoints: ['Pesticide-free', 'Freshly harvested', 'Certified organic'],
+    tags: ['organic', 'vegetables', 'fresh'],
+    minimumQty: 1,
+    isFeatured: true,
+    isActive: true,
+    variants: [
+      {
+        weight: '500 g',
+        price: 125,
+        mrp: 150,
+        stock: 150,
+        isAvailable: true
+      },
+      {
+        weight: '1 kg',
+        price: 225,
+        mrp: 275,
+        stock: 120,
+        isAvailable: true
+      }
+    ],
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1464226184158-280fb86fcff1?auto=format&fit=crop&w=1200&q=80',
+        publicId: 'seed/greens-1'
+      }
+    ]
+  },
+  {
+    name: 'Fresh Farm Eggs',
+    slug: 'fresh-farm-eggs',
+    categorySlug: 'farm-fresh',
+    description: 'Free-range eggs from our farm hens. No antibiotics, no artificial feed.',
+    keyPoints: ['Free-range', 'No antibiotics', 'Fresh daily'],
+    tags: ['eggs', 'organic', 'farm-fresh'],
+    minimumQty: 1,
+    isFeatured: false,
+    isActive: true,
+    variants: [
+      {
+        weight: '6 eggs',
+        price: 65,
+        mrp: 85,
+        stock: 200,
+        isAvailable: true
+      },
+      {
+        weight: '12 eggs',
+        price: 120,
+        mrp: 160,
+        stock: 180,
+        isAvailable: true
+      }
+    ],
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1582720571773-7249df2edf46?auto=format&fit=crop&w=1200&q=80',
+        publicId: 'seed/eggs-1'
       }
     ]
   }
 ]
+
 
 const SEED_COUPONS: SeedCoupon[] = [
   {
@@ -125,9 +222,36 @@ const SEED_COUPONS: SeedCoupon[] = [
     usageLimit: 1000,
     perUserLimit: 1,
     isActive: true
+  },
+  {
+    code: 'SUMMER20',
+    type: 'percent',
+    value: 20,
+    minOrderAmount: 1000,
+    maxDiscount: 300,
+    usageLimit: 500,
+    perUserLimit: 1,
+    isActive: true
+  },
+  {
+    code: 'FREEDELIV',
+    type: 'delivery',
+    value: 100,
+    minOrderAmount: 800,
+    usageLimit: 300,
+    perUserLimit: 2,
+    isActive: true
+  },
+  {
+    code: 'FLAT100',
+    type: 'flat',
+    value: 100,
+    minOrderAmount: 1500,
+    usageLimit: 200,
+    perUserLimit: 1,
+    isActive: true
   }
 ]
-
 const SEED_PINCODES: SeedPincode[] = [
   {
     pincode: '639001',
@@ -137,9 +261,63 @@ const SEED_PINCODES: SeedPincode[] = [
     deliveryFee: 0,
     estimatedDays: '1-2 days',
     isActive: true
+  },
+  {
+    pincode: '639002',
+    city: 'Karur',
+    state: 'Tamil Nadu',
+    zone: 'tamil-nadu',
+    deliveryFee: 0,
+    estimatedDays: '1-2 days',
+    isActive: true
+  },
+  {
+    pincode: '641001',
+    city: 'Coimbatore',
+    state: 'Tamil Nadu',
+    zone: 'south-india',
+    deliveryFee: 50,
+    estimatedDays: '2-3 days',
+    isActive: true
+  },
+  {
+    pincode: '600001',
+    city: 'Chennai',
+    state: 'Tamil Nadu',
+    zone: 'south-india',
+    deliveryFee: 75,
+    estimatedDays: '2-3 days',
+    isActive: true
+  },
+  {
+    pincode: '500001',
+    city: 'Hyderabad',
+    state: 'Telangana',
+    zone: 'south-india',
+    deliveryFee: 100,
+    estimatedDays: '3-4 days',
+    isActive: true
+  },
+  {
+    pincode: '110001',
+    city: 'New Delhi',
+    state: 'Delhi',
+    zone: 'rest-india',
+    deliveryFee: 150,
+    estimatedDays: '4-5 days',
+    isActive: true
   }
 ]
 
+const SEED_BUSINESS_HOURS: SeedBusinessHours[] = [
+  { day: 'monday', isOpen: true, openTime: '08:00', closeTime: '20:00', pickupOpenTime: '07:00', pickupCloseTime: '18:00' },
+  { day: 'tuesday', isOpen: true, openTime: '08:00', closeTime: '20:00', pickupOpenTime: '07:00', pickupCloseTime: '18:00' },
+  { day: 'wednesday', isOpen: true, openTime: '08:00', closeTime: '20:00', pickupOpenTime: '07:00', pickupCloseTime: '18:00' },
+  { day: 'thursday', isOpen: true, openTime: '08:00', closeTime: '20:00', pickupOpenTime: '07:00', pickupCloseTime: '18:00' },
+  { day: 'friday', isOpen: true, openTime: '08:00', closeTime: '20:00', pickupOpenTime: '07:00', pickupCloseTime: '18:00' },
+  { day: 'saturday', isOpen: true, openTime: '07:00', closeTime: '21:00', pickupOpenTime: '06:00', pickupCloseTime: '19:00' },
+  { day: 'sunday', isOpen: true, openTime: '08:00', closeTime: '20:00', pickupOpenTime: '07:00', pickupCloseTime: '18:00' }
+]
 const fail = (message: string): never => {
   throw new SeedSafetyError(message)
 }
@@ -158,8 +336,8 @@ const printSafetyBanner = () => {
 }
 
 const assertSeedPolicy = () => {
-  if (config.isProduction) {
-    fail('Production database cannot be seeded.')
+  if (config.isProduction && !allowProd) {
+    fail('Production database cannot be seeded. Use --allow-prod flag if intentional.')
   }
 
   if (!config.enableSeed) {
@@ -172,16 +350,59 @@ const assertSeedPolicy = () => {
   }
 }
 
+
 const hasExistingData = async (): Promise<boolean> => {
-  const [categories, products, coupons, pincodes, users] = await Promise.all([
+  const [
+    categories,
+    products,
+    coupons,
+    pincodes,
+    businessHours,
+    orders,
+    payments,
+    webhooks,
+    stockLogs,
+    complaints,
+    bulkEnquiries,
+    notifyMe,
+    otps,
+    otpRequests,
+    users
+  ] = await Promise.all([
     Category.countDocuments(),
     Product.countDocuments(),
     Coupon.countDocuments(),
     Pincode.countDocuments(),
+    BusinessHours.countDocuments(),
+    Order.countDocuments(),
+    PaymentTransaction.countDocuments(),
+    PaymentWebhookEvent.countDocuments(),
+    StockLog.countDocuments(),
+    Complaint.countDocuments(),
+    BulkEnquiry.countDocuments(),
+    NotifyMe.countDocuments(),
+    Otp.countDocuments(),
+    OtpRequest.countDocuments(),
     User.countDocuments()
   ])
 
-  return [categories, products, coupons, pincodes, users].some((count) => count > 0)
+  return [
+    categories,
+    products,
+    coupons,
+    pincodes,
+    businessHours,
+    orders,
+    payments,
+    webhooks,
+    stockLogs,
+    complaints,
+    bulkEnquiries,
+    notifyMe,
+    otps,
+    otpRequests,
+    users
+  ].some((count) => count > 0)
 }
 
 const clearCollections = async () => {
@@ -190,10 +411,19 @@ const clearCollections = async () => {
     Category.deleteMany({}),
     Coupon.deleteMany({}),
     Pincode.deleteMany({}),
+    BusinessHours.deleteMany({}),
+    Order.deleteMany({}),
+    PaymentTransaction.deleteMany({}),
+    PaymentWebhookEvent.deleteMany({}),
+    StockLog.deleteMany({}),
+    Complaint.deleteMany({}),
+    BulkEnquiry.deleteMany({}),
+    NotifyMe.deleteMany({}),
+    Otp.deleteMany({}),
+    OtpRequest.deleteMany({}),
     User.deleteMany({ role: 'customer' })
   ])
 }
-
 const upsertCategories = async (): Promise<Map<string, string>> => {
   for (const category of SEED_CATEGORIES) {
     await Category.updateOne(
@@ -294,6 +524,24 @@ const upsertPincodes = async (): Promise<void> => {
   }
 }
 
+const upsertBusinessHours = async (): Promise<void> => {
+  for (const hours of SEED_BUSINESS_HOURS) {
+    await BusinessHours.updateOne(
+      { day: hours.day },
+      {
+        $setOnInsert: {
+          day: hours.day,
+          isOpen: hours.isOpen,
+          openTime: hours.openTime,
+          closeTime: hours.closeTime,
+          pickupOpenTime: hours.pickupOpenTime,
+          pickupCloseTime: hours.pickupCloseTime
+        }
+      },
+      { upsert: true }
+    )
+  }
+}
 const run = async (): Promise<void> => {
   try {
     assertSeedPolicy()
@@ -314,6 +562,7 @@ const run = async (): Promise<void> => {
     await upsertProducts(categories)
     await upsertCoupons()
     await upsertPincodes()
+    await upsertBusinessHours()
 
     logger.info('Seed execution completed', {
       environment: config.nodeEnv,
