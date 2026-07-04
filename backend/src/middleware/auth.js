@@ -34,9 +34,15 @@ export const protect = async (req, res, next) => {
 
 export const allowSessionOrVerification = async (req, res, next) => {
   try {
-    let token = req.cookies?.token
-    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1]
+    const authHeader = req.headers.authorization?.startsWith('Bearer ')
+      ? req.headers.authorization.split(' ')[1]
+      : undefined
+
+    let token = req.cookies?.token || authHeader
+    let verificationToken = req.cookies?.otp_ticket
+
+    if (!verificationToken && authHeader && authHeader !== req.cookies?.token) {
+      verificationToken = authHeader
     }
 
     if (token) {
@@ -56,7 +62,6 @@ export const allowSessionOrVerification = async (req, res, next) => {
       }
     }
 
-    const verificationToken = req.cookies?.otp_ticket
     if (!verificationToken) {
       return res.status(401).json(errorResponse('Unauthorized', ['Authentication required. Please login.']))
     }
