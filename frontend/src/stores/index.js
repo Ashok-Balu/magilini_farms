@@ -4,8 +4,9 @@ import api from '@/lib/api.js'
 
 // ── AUTH STORE ────────────────────────────────────────────
 export const useAuthStore = defineStore('auth', () => {
-  const user    = ref(null)
-  const loading = ref(false)
+  const user              = ref(null)
+  const loading           = ref(false)
+  const verificationToken = ref(null)
 
   const isLoggedIn = computed(() => !!user.value)
   const isAdmin    = computed(() => user.value?.role === 'admin')
@@ -15,7 +16,10 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data } = await api.get('/auth/me')
       user.value = data.user
-    } catch { user.value = null }
+    } catch {
+      user.value = null
+      verificationToken.value = null
+    }
   }
 
   const sendOtp = async (phone) => {
@@ -40,6 +44,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (email) payload.email = email
       const { data } = await api.post('/auth/verify-otp', payload)
       if (data.user) user.value = data.user
+      if (data.otp_ticket) verificationToken.value = data.otp_ticket
       return { success: true, ...data }
     } catch (err) {
       return { success: false, message: err.response?.data?.message || 'Invalid OTP.' }
@@ -57,8 +62,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   const completeProfile = async (profileData) => {
     try {
-      const { data } = await api.post('/auth/complete-profile', profileData)
+      const options = verificationToken.value
+        ? { headers: { Authorization: `Bearer ${verificationToken.value}` } }
+        : undefined
+
+      const { data } = await api.post('/auth/complete-profile', profileData, options)
       user.value = data.user
+      verificationToken.value = null
       return { success: true }
     } catch (err) {
       return { success: false, message: err.response?.data?.message || 'Failed to update profile.' }
