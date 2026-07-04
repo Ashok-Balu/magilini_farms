@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import { errorResponse } from '../utils/response.js'
+import { logger } from '../utils/logger.js'
 
 const cookieBaseOptions = {
   httpOnly: true,
@@ -103,6 +104,11 @@ export const setTokenCookie = (res, token) => {
     ...cookieBaseOptions,
     maxAge: 7 * 24 * 60 * 60 * 1000
   })
+  try {
+    logger.info('Set auth cookie', { cookie: 'token', secure: cookieBaseOptions.secure, sameSite: cookieBaseOptions.sameSite })
+  } catch (err) {
+    // ignore logging failures
+  }
 }
 
 export const setVerificationCookie = (res, token) => {
@@ -110,6 +116,11 @@ export const setVerificationCookie = (res, token) => {
     ...cookieBaseOptions,
     maxAge: 10 * 60 * 1000
   })
+  try {
+    logger.info('Set verification cookie', { cookie: 'otp_ticket', secure: cookieBaseOptions.secure, sameSite: cookieBaseOptions.sameSite })
+  } catch (err) {
+    // ignore logging failures
+  }
 }
 
 export const clearAuthCookies = (res) => {

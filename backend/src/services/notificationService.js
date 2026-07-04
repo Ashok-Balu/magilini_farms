@@ -26,7 +26,18 @@ export const sendSMS = async (phone, message) => {
     console.log(`✅ SMS sent to ${phone}`)
     return true
   } catch (err) {
-    console.error(`❌ SMS failed: ${err.message}`)
+    console.error(`❌ SMS failed: ${err?.message || err}`)
+    // Log Twilio-specific error details when available to aid debugging
+    try {
+      console.error('Twilio error details:', {
+        code: err?.code,
+        status: err?.status,
+        moreInfo: err?.moreInfo,
+        response: err?.response?.body || undefined
+      })
+    } catch (logErr) {
+      console.error('Failed to log Twilio error details', logErr)
+    }
     return false
   }
 }
