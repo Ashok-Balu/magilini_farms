@@ -39,7 +39,7 @@ export const generateInvoicePDF = (order) => {
          .text(`Invoice No: INV-${order.orderNumber}`, 350, 60, { align: 'right', width: 200 })
          .text(`Order No: ${order.orderNumber}`,       350, 75, { align: 'right', width: 200 })
          .text(`Date: ${new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, 350, 90, { align: 'right', width: 200 })
-         .text('Status: PAID',                         350, 105, { align: 'right', width: 200 })
+         .text(`Status: ${String(order.paymentStatus || 'pending').toUpperCase()}`, 350, 105, { align: 'right', width: 200 })
 
       // ── BILL TO ──────────────────────────────────────────
       doc.moveDown(2)
@@ -107,7 +107,7 @@ export const generateInvoicePDF = (order) => {
       addRow('Delivery Fee', order.deliveryFee === 0 ? 'FREE' : `₹${order.deliveryFee}`)
       doc.moveTo(350, y).lineTo(530, y).strokeColor('#E5E7EB').stroke()
       y += 8
-      addRow('TOTAL PAID',  `₹${order.total}`, true, GREEN)
+      addRow(order.paymentStatus === 'paid' ? 'TOTAL PAID' : 'TOTAL', `₹${order.total}`, true, GREEN)
 
       // Payment method
       doc.fillColor(MUTED).fontSize(8).text(`Payment: ${order.paymentMethod} — ${order.paymentStatus.toUpperCase()}`, 50, y + 10)

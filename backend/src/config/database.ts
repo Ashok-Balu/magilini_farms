@@ -16,6 +16,8 @@ const printFailureDiagnostics = (error: unknown): void => {
     reason?: unknown
     cause?: unknown
   }
+  const safeMessage = (message: string): string =>
+    message.replace(/mongodb(?:\+srv)?:\/\/\S+/gi, '[MongoDB connection string redacted]')
 
   console.error('=====================================')
   console.error('MongoDB Connection Failed')
@@ -24,9 +26,8 @@ const printFailureDiagnostics = (error: unknown): void => {
   console.error(`Env File    : ${config.envFileName}`)
   console.error(`Database    : ${config.dbName}`)
   console.error(`Host        : ${config.mongoHost}`)
-  console.error(`Mongo URI   : ${config.maskedMongoUri}`)
   console.error(`Error Name  : ${err.name || 'UnknownError'}`)
-  console.error(`Error Msg   : ${err.message || String(error)}`)
+  console.error(`Error Msg   : ${safeMessage(err.message || String(error))}`)
 
   const topology = asTopology(err.reason) || asTopology(err.cause)
   if (topology) {
@@ -34,17 +35,13 @@ const printFailureDiagnostics = (error: unknown): void => {
       const serverError = (server as { error?: Error & { code?: string } }).error
       if (!serverError) continue
       console.error(`Server      : ${address}`)
-      console.error(`Server Err  : ${serverError.name}: ${serverError.message}`)
+      console.error(`Server Err  : ${serverError.name}: ${safeMessage(serverError.message)}`)
       if (serverError.code) {
         console.error(`Server Code : ${serverError.code}`)
       }
     }
   }
 
-  if (err.stack && !config.isProduction) {
-    console.error('Stack Trace:')
-    console.error(err.stack)
-  }
   console.error('=====================================')
 }
 

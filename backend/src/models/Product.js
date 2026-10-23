@@ -1,10 +1,11 @@
 import mongoose from 'mongoose'
+import { weightToKg } from '../utils/weight.js'
 
 const variantSchema = new mongoose.Schema({
-  weight:      { type: String, required: true }, // '1 kg', '3 kg', '5 kg', '10 kg'
-  price:       { type: Number, required: true },
-  mrp:         { type: Number, required: true },
-  stock:       { type: Number, default: 0, min: 0 },
+  weight:      { type: String, required: true, validate: value => weightToKg(value) > 0 },
+  price:       { type: Number, required: true, min: 0.01 },
+  mrp:         { type: Number, required: true, min: 0.01, validate: function(value) { return value >= this.price } },
+  stock:       { type: Number, default: 0, min: 0, validate: Number.isSafeInteger },
   isAvailable: { type: Boolean, default: true }
 }, { _id: true })
 
@@ -28,7 +29,7 @@ const productSchema = new mongoose.Schema({
   productTerms:{ type: String },
   tags:       [{ type: String }],
   badge:      { type: String },
-  minimumQty: { type: Number, default: 1 },
+  minimumQty: { type: Number, default: 1, min: 1, validate: Number.isSafeInteger },
   variants:   [variantSchema],
   images:     [imageSchema],
 
@@ -48,9 +49,10 @@ const productSchema = new mongoose.Schema({
 
 // Virtual: overall stock status
 productSchema.virtual('stockStatus').get(function() {
-  const totalStock = this.variants.reduce((s, v) => s + v.stock, 0)
+  const variants = this.variants || []
+  const totalStock = variants.reduce((s, v) => s + v.stock, 0)
   if (totalStock === 0) return 'out-of-stock'
-  if (this.variants.some(v => v.stock <= 10)) return 'low-stock'
+  if (variants.some(v => v.stock <= 10)) return 'low-stock'
   return 'in-stock'
 })
 

@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/lib/api.js'
+import { weightToKg } from '@/lib/weight.js'
 
 // ── AUTH STORE ────────────────────────────────────────────
 export const useAuthStore = defineStore('auth', () => {
-  const user              = ref(null)
-  const loading           = ref(false)
-  const verificationToken = ref(localStorage.getItem('nm_verification_token') || null)
+  const user    = ref(null)
+  const loading = ref(false)
 
   const isLoggedIn = computed(() => !!user.value)
   const isAdmin    = computed(() => user.value?.role === 'admin')
@@ -21,61 +21,46 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const sendOtp = async (phone) => {
+  const register = async ({ name, email, password, confirmPassword, phone }) => {
     loading.value = true
     try {
-      const normalizedPhone = String(phone || '').trim()
-      const { data } = await api.post('/auth/send-otp', { phone: normalizedPhone })
-      if (import.meta.env.DEV && data.otp) {
-        console.log(`OTP for ${normalizedPhone}: ${data.otp}`)
-      }
+      const { data } = await api.post('/auth/register', { name, email, password, confirmPassword, phone })
+      user.value = data.data.user
       return { success: true, ...data }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || 'Failed to send OTP.' }
+      return { success: false, message: err.response?.data?.message || 'Failed to create account.' }
     } finally { loading.value = false }
   }
 
-  const verifyOtp = async (phone, otp, name, email) => {
+  const login = async (email, password) => {
     loading.value = true
     try {
-      const payload = { phone, otp }
-      if (name)  payload.name  = name
-      if (email) payload.email = email
-      const { data } = await api.post('/auth/verify-otp', payload)
-      if (data.user) user.value = data.user
-      if (data.otp_ticket) {
-        verificationToken.value = data.otp_ticket
-        localStorage.setItem('nm_verification_token', data.otp_ticket)
-      }
+      const { data } = await api.post('/auth/login', { email, password })
+      user.value = data.data.user
       return { success: true, ...data }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || 'Invalid OTP.' }
+      return { success: false, message: err.response?.data?.message || 'Invalid email or password.' }
     } finally { loading.value = false }
   }
 
-  const clearDevOtpRecords = async () => {
+  const forgotPassword = async (email) => {
+    loading.value = true
     try {
-      const { data } = await api.post('/auth/dev/clear-otp')
+      const { data } = await api.post('/auth/forgot-password', { email })
       return { success: true, ...data }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || 'Failed to clear development OTP records.' }
-    }
+      return { success: false, message: err.response?.data?.message || 'Failed to send reset link.' }
+    } finally { loading.value = false }
   }
 
-  const completeProfile = async (profileData) => {
+  const resetPassword = async (token, password) => {
+    loading.value = true
     try {
-      const options = verificationToken.value
-        ? { headers: { Authorization: `Bearer ${verificationToken.value}` } }
-        : undefined
-
-      const { data } = await api.post('/auth/complete-profile', profileData, options)
-      user.value = data.user
-      verificationToken.value = null
-      localStorage.removeItem('nm_verification_token')
-      return { success: true }
+      const { data } = await api.post('/auth/reset-password', { token, password })
+      return { success: true, ...data }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || 'Failed to update profile.' }
-    }
+      return { success: false, message: err.response?.data?.message || 'Failed to reset password.' }
+    } finally { loading.value = false }
   }
 
   const adminLogin = async (email, password) => {
@@ -94,8 +79,6 @@ export const useAuthStore = defineStore('auth', () => {
       try { await api.post('/auth/logout') } catch { /* ignore */ }
     }
     user.value = null
-    verificationToken.value = null
-    localStorage.removeItem('nm_verification_token')
   }
 
   return {
@@ -105,10 +88,10 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     isCustomer,
     fetchMe,
-    sendOtp,
-    verifyOtp,
-    clearDevOtpRecords,
-    completeProfile,
+    register,
+    login,
+    forgotPassword,
+    resetPassword,
     adminLogin,
     logout
   }
@@ -117,13 +100,33 @@ export const useAuthStore = defineStore('auth', () => {
 // ── CART STORE ────────────────────────────────────────────
 export const useCartStore = defineStore('cart', () => {
   const items = ref([])
+  const minimumOrderKg = ref(3)
+  const freeDeliveryMin = ref(0)
+  const settingsLoaded = ref(false)
 
   const count    = computed(() => items.value.reduce((s, i) => s + i.qty, 0))
-  const totalKg  = computed(() => items.value.reduce((s, i) => s + parseFloat(i.variant.weight) * i.qty, 0))
+  const totalKg  = computed(() => items.value.reduce((s, i) => s + weightToKg(i.variant.weight) * i.qty, 0))
   const subtotal = computed(() => items.value.reduce((s, i) => s + i.variant.price * i.qty, 0))
-  const minMet   = computed(() => totalKg.value >= 3)
+  const minMet   = computed(() => totalKg.value >= minimumOrderKg.value)
+
+  const loadSettings = async () => {
+    if (settingsLoaded.value) return minimumOrderKg.value
+    try {
+      const { data } = await api.get('/store-settings')
+      const value = Number(data.settings?.minimumOrderKg)
+      if (Number.isFinite(value) && value > 0) minimumOrderKg.value = value
+      const freeDeliveryValue = Number(data.settings?.freeDeliveryMin)
+      if (Number.isFinite(freeDeliveryValue) && freeDeliveryValue > 0) freeDeliveryMin.value = freeDeliveryValue
+      settingsLoaded.value = true
+    } catch {
+      settingsLoaded.value = true
+    }
+    return minimumOrderKg.value
+  }
 
   const addItem = (product, variant, qty = 1) => {
+    if (product.seasonalStatus && product.seasonalStatus !== 'available') return
+    if (variant.isAvailable === false) return
     const existing = items.value.find(i => i.productId === product._id && i.variantId === variant._id)
     const maxStock = Math.max(0, Number(variant.stock || 0))
     if (maxStock === 0) return
@@ -167,14 +170,49 @@ export const useCartStore = defineStore('cart', () => {
   }
 
   const loadCart = () => {
-    try { items.value = JSON.parse(localStorage.getItem('nm_cart') || '[]') } catch { items.value = [] }
+    try {
+      const saved = JSON.parse(localStorage.getItem('nm_cart') || '[]')
+      items.value = Array.isArray(saved) ? saved.filter(item => item?.productId && item?.variantId && item?.variant?.weight) : []
+    } catch { items.value = [] }
+  }
+
+  const reconcile = async () => {
+    const productRequests = new Map()
+    const reconciled = await Promise.all(items.value.map(async item => {
+      const slug = item.product?.slug
+      if (!slug) return item
+      if (!productRequests.has(slug)) {
+        productRequests.set(slug, api.get(`/products/${encodeURIComponent(slug)}`).then(({ data }) => data.product))
+      }
+      try {
+        const product = await productRequests.get(slug)
+        if (!product || product.seasonalStatus !== 'available') return null
+        const variant = product.variants?.find(candidate => String(candidate._id) === String(item.variantId))
+        if (!variant || variant.isAvailable === false || Number(variant.stock) <= 0) return null
+        return {
+          productId: product._id,
+          variantId: variant._id,
+          product: { _id: product._id, name: product.name, images: product.images, slug: product.slug },
+          variant,
+          qty: Math.min(Math.max(1, Number(item.qty) || 1), Number(variant.stock))
+        }
+      } catch (error) {
+        if (error.response?.status === 404) return null
+        return item
+      }
+    }))
+    const validItems = reconciled.filter(Boolean)
+    const changed = JSON.stringify(items.value) !== JSON.stringify(validItems)
+    items.value = validItems
+    if (changed) saveCart()
+    return { changed, removed: reconciled.filter(item => item === null).length }
   }
 
   const cartForCheckout = computed(() =>
     items.value.map(i => ({ productId: i.productId, variantId: i.variantId, qty: i.qty }))
   )
 
-  return { items, count, totalKg, subtotal, minMet, addItem, updateQty, removeItem, clear, loadCart, cartForCheckout }
+  return { items, count, totalKg, subtotal, minMet, minimumOrderKg, freeDeliveryMin, addItem, updateQty, removeItem, clear, loadCart, loadSettings, reconcile, cartForCheckout }
 })
 
 // ── TOAST STORE ───────────────────────────────────────────
@@ -229,4 +267,44 @@ export const useProductStore = defineStore('products', () => {
   }
 
   return { products, categories, loading, total, fetchProducts, fetchProduct, fetchCategories, fetchFeatured }
+})
+
+// ── PINCODE STORE ────────────────────────────────────────────
+export const usePincodeStore = defineStore('pincode', () => {
+  const pincode = ref(localStorage.getItem('nm_pincode') || '')
+  const result  = ref(null)
+  const loading = ref(false)
+
+  const check = async (code) => {
+    if (!code || code.length !== 6) return null
+    pincode.value = code
+    localStorage.setItem('nm_pincode', code)
+    loading.value = true
+    try {
+      const { data } = await api.get(`/delivery/check/${code}`)
+      result.value = data
+      return data
+    } catch (err) {
+      result.value = {
+        serviceable: false,
+        lookupError: true,
+        message: err.response?.data?.message || 'Unable to check delivery right now. Please try again.'
+      }
+      return result.value
+    } finally { loading.value = false }
+  }
+
+  const clear = () => {
+    pincode.value = ''
+    result.value = null
+    localStorage.removeItem('nm_pincode')
+  }
+
+  const loadSaved = async () => {
+    if (pincode.value && pincode.value.length === 6 && !result.value) {
+      await check(pincode.value)
+    }
+  }
+
+  return { pincode, result, loading, check, clear, loadSaved }
 })

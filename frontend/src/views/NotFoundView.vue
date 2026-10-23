@@ -1,7 +1,7 @@
 <template>
   <div>
     <AppNavbar/>
-    <div class="mt-[68px] min-h-[70vh] flex items-center justify-center text-center px-6">
+    <div class="mt-[60px] sm:mt-[68px] min-h-[70vh] flex items-center justify-center text-center px-6">
       <div>
         <div class="text-7xl mb-4">🥭</div>
         <h1 class="font-serif text-4xl mb-3">Page Not Found</h1>

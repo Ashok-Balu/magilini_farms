@@ -31,9 +31,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/lib/api.js'
+import { useToastStore } from '@/stores/index.js'
+const toast = useToastStore()
 const complaints = ref([]); const loading = ref(true)
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN')
-const load = async () => { loading.value=true; try { const {data}=await api.get('/admin/complaints'); complaints.value=data.complaints } finally { loading.value=false } }
-const updateStatus = async (id,status) => { await api.patch(`/admin/complaints/${id}`,{status}) }
+const load = async () => { loading.value=true; try { const {data}=await api.get('/admin/complaints'); complaints.value=data.complaints } catch { toast.error('Failed to load complaints.') } finally { loading.value=false } }
+const updateStatus = async (id,status) => {
+  try { await api.patch(`/admin/complaints/${id}`,{status}); toast.success('Complaint status updated.') }
+  catch (err) { toast.error(err.response?.data?.message || 'Failed to update complaint.') }
+}
 onMounted(load)
 </script>

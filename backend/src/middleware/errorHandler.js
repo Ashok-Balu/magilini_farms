@@ -12,10 +12,8 @@ export const errorHandler = (err, req, res, next) => {
 
   logger.error('Request failed', {
     method: req.method,
-    url: req.originalUrl,
     statusCode,
-    errorName: err?.name,
-    errorMessage: err?.message
+    errorName: err?.name
   })
 
   if (err instanceof HttpError) {
@@ -60,5 +58,5 @@ export const errorHandler = (err, req, res, next) => {
 
 // 404 handler
 export const notFound = (req, res) => {
-  res.status(404).json(errorResponse(`Route ${req.originalUrl} not found.`, ['Route not found.']))
+  res.status(404).json(errorResponse('Route not found.', ['Route not found.']))
 }

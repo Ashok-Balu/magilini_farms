@@ -22,13 +22,15 @@ const router = createRouter({
 
     // ── AUTH ──────────────────────────────────────────────
     { path: '/login',    name: 'Login',    component: () => import('@/views/LoginView.vue'),    meta: { guestOnly: true } },
-    { path: '/register', name: 'Register', component: () => import('@/views/LoginView.vue'),    meta: { guestOnly: true } },
+    { path: '/register', name: 'Register', component: () => import('@/views/RegisterView.vue'), meta: { guestOnly: true } },
+    { path: '/forgot-password',       name: 'ForgotPassword', component: () => import('@/views/ForgotPasswordView.vue'), meta: { guestOnly: true } },
+    { path: '/reset-password/:token', name: 'ResetPassword',  component: () => import('@/views/ResetPasswordView.vue'), meta: { guestOnly: true } },
 
     // ── CUSTOMER (protected) ──────────────────────────────
-    { path: '/checkout',         name: 'Checkout',        component: () => import('@/views/CheckoutView.vue'),        meta: { requiresAuth: true } },
-    { path: '/checkout/success', name: 'CheckoutSuccess', component: () => import('@/views/CheckoutSuccessView.vue'), meta: { requiresAuth: true } },
-    { path: '/account',          name: 'Account',         component: () => import('@/views/AccountView.vue'),          meta: { requiresAuth: true } },
-    { path: '/account/orders/:id', name: 'OrderDetail',  component: () => import('@/views/OrderDetailView.vue'),      meta: { requiresAuth: true } },
+    { path: '/checkout',         name: 'Checkout',        component: () => import('@/views/CheckoutView.vue'),        meta: { requiresAuth: true, requiresCustomer: true } },
+    { path: '/checkout/success', name: 'CheckoutSuccess', component: () => import('@/views/CheckoutSuccessView.vue'), meta: { requiresAuth: true, requiresCustomer: true } },
+    { path: '/account',          name: 'Account',         component: () => import('@/views/AccountView.vue'),          meta: { requiresAuth: true, requiresCustomer: true } },
+    { path: '/account/orders/:id', name: 'OrderDetail',  component: () => import('@/views/OrderDetailView.vue'),      meta: { requiresAuth: true, requiresCustomer: true } },
 
     // ── ADMIN ─────────────────────────────────────────────
     { path: '/admin/login', name: 'AdminLogin', component: () => import('@/views/admin/AdminLoginView.vue'), meta: { guestOnly: true } },
@@ -43,6 +45,9 @@ const router = createRouter({
         { path: 'products/:id', name: 'AdminProductEdit', component: () => import('@/views/admin/ProductFormView.vue') },
         { path: 'orders',       name: 'AdminOrders',      component: () => import('@/views/admin/OrdersView.vue') },
         { path: 'orders/:id',   name: 'AdminOrderDetail', component: () => import('@/views/admin/OrderDetailView.vue') },
+        { path: 'payments',     name: 'AdminPayments',     component: () => import('@/views/admin/PaymentReconciliationView.vue') },
+        { path: 'notifications',name: 'AdminNotifications',component: () => import('@/views/admin/NotificationsView.vue') },
+        { path: 'audit-logs',   name: 'AdminAuditLogs',    component: () => import('@/views/admin/AuditLogsView.vue') },
         { path: 'customers',    name: 'AdminCustomers',   component: () => import('@/views/admin/CustomersView.vue') },
         { path: 'coupons',      name: 'AdminCoupons',     component: () => import('@/views/admin/CouponsView.vue') },
         { path: 'categories',   name: 'AdminCategories',  component: () => import('@/views/admin/CategoriesView.vue') },
@@ -51,6 +56,7 @@ const router = createRouter({
         { path: 'bulk',         name: 'AdminBulk',        component: () => import('@/views/admin/BulkEnquiriesView.vue') },
         { path: 'hours',        name: 'AdminHours',       component: () => import('@/views/admin/BusinessHoursView.vue') },
         { path: 'stock-logs',   name: 'AdminStockLogs',   component: () => import('@/views/admin/StockLogsView.vue') },
+        { path: 'reviews',      name: 'AdminReviews',    component: () => import('@/views/admin/ReviewsView.vue') },
       ]
     },
 
@@ -72,6 +78,9 @@ router.beforeEach(async (to, from, next) => {
   }
   if (to.meta.requiresAuth && !auth.isLoggedIn) {
     return next({ name: 'Login', query: { redirect: to.fullPath } })
+  }
+  if (to.meta.requiresCustomer && !auth.isCustomer) {
+    return next(auth.isAdmin ? '/admin' : '/')
   }
   if (to.meta.guestOnly && auth.isLoggedIn) {
     return next(auth.isAdmin ? '/admin' : '/')

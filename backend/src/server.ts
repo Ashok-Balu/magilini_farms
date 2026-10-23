@@ -15,31 +15,19 @@ import { connectDatabase } from './config/database.js'
 import routes from './routes/index.js'
 import { errorHandler, notFound } from './middleware/errorHandler.js'
 import { xssProtection } from './middleware/xssProtection.js'
+import { verifyAndParseRazorpayWebhook } from './middleware/razorpayWebhook.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 import Order from './models/Order.js'
-import Product from './models/Product.js'
-import Otp from './models/Otp.js'
-import OtpRequest from './models/OtpRequest.js'
-import { StockLog } from './models/index.js'
-import { otpConfig } from './config/otp.js'
 import { notifyStatusUpdate } from './services/notificationService.js'
+import { releaseInventory } from './services/inventoryService.js'
 import { logger } from './utils/logger.js'
 import { successResponse } from './utils/response.js'
-import { otpService } from './services/otp/otpService.js'
+import { getExpiredPickupReservationFilter, getPendingPaymentExpiryFilter } from './utils/paymentPolicy.js'
 
 const app = express()
 const PORT = config.port
 
 await connectDatabase()
-
-if (otpConfig.resetCountersOnRestart) {
-  await Promise.all([
-    Otp.deleteMany({}),
-    OtpRequest.deleteMany({})
-  ])
-  console.log('Development Mode')
-  console.log('OTP counters reset on server restart')
-}
 
 if (config.trustProxy) {
   app.set('trust proxy', config.trustProxyHops)
@@ -61,17 +49,18 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
   exposedHeaders: ['Content-Type', 'X-Total-Count'],
   maxAge: 86400
 } as CorsOptions))
 app.use(compression())
 app.use(cookieParser())
+app.use('/api/payment/webhook', express.raw({ type: 'application/json', limit: '1mb' }), verifyAndParseRazorpayWebhook)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(mongoSanitize())
 app.use(xssProtection)
-app.use(morgan(':method :url :status :response-time ms', { stream: logger.morganStream }))
+app.use(morgan(':method :status :response-time ms', { stream: logger.morganStream }))
 
 app.get('/', (_: Request, res: Response) => res.json(successResponse('MagiliniFarms API is running')))
 app.get('/health', (_: Request, res: Response) => {
@@ -84,74 +73,93 @@ app.get('/health', (_: Request, res: Response) => {
     timestamp: new Date().toISOString()
   }))
 })
+app.get('/ready', (_: Request, res: Response) => {
+  const dbConnected = mongoose.connection.readyState === 1
+  if (!dbConnected) {
+    return res.status(503).json(successResponse('Service is not ready', {
+      serverStatus: 'up',
+      databaseStatus: 'disconnected'
+    }))
+  }
+  return res.json(successResponse('Service is ready', {
+    serverStatus: 'up',
+    databaseStatus: 'connected'
+  }))
+})
 
 app.use('/api', apiLimiter, routes)
 
 app.use(notFound)
 app.use(errorHandler)
 
-const restoreOrderStock = async (items: Array<{ productId?: unknown; variantId?: unknown; qty?: number }>, orderId: unknown) => {
-  for (const item of items) {
-    if (!item.productId || !item.variantId) continue
-
-    const productId = String(item.productId)
-    const variantId = String(item.variantId)
-
-    const product = await Product.findById(productId)
-    if (!product) continue
-
-    const variant = product.variants.id(variantId)
-    if (!variant) continue
-
-    const before = variant.stock
-    variant.stock += Number(item.qty || 0)
-    await product.save()
-
-    await StockLog.create({
-      productId: product._id,
-      productName: product.name,
-      variantWeight: variant.weight,
-      changeType: 'cancellation',
-      quantityBefore: before,
-      quantityChange: Number(item.qty || 0),
-      quantityAfter: variant.stock,
-      orderId
-    })
-  }
-}
-
-cron.schedule('0 * * * *', async () => {
+const expiryTask = cron.schedule('*/5 * * * *', async () => {
   try {
-    const expiry = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const now = new Date()
+    const legacyExpiry = new Date(now.getTime() - 24 * 60 * 60 * 1000)
     const expired = await Order.find({
-      paymentMethod: 'direct-upi',
-      paymentStatus: 'pending',
-      status: 'New',
-      createdAt: { $lt: expiry }
-    })
+      $or: [
+        getPendingPaymentExpiryFilter(now, legacyExpiry),
+        getExpiredPickupReservationFilter(now)
+      ]
+    }).limit(200)
 
     for (const order of expired) {
-      order.status = 'Cancelled'
-      order.paymentStatus = 'failed'
-      order.cancelledBy = 'system'
-      order.cancelReason = 'Payment not received within 24 hours'
-      order.statusHistory.push({ status: 'Cancelled', note: 'Auto-cancelled: payment timeout' })
-      await restoreOrderStock(order.items, order._id)
-      await order.save()
-      await notifyStatusUpdate(order)
-      console.log(`Auto-cancelled order ${order.orderNumber}`)
+      const session = await mongoose.startSession()
+      let cancelled: any = null
+      try {
+        await session.withTransaction(async () => {
+          const paymentNeedsReview = order.paymentMethod === 'direct-upi' && Boolean(order.utrNumber)
+          cancelled = await Order.findOneAndUpdate({
+            _id: order._id,
+            status: 'New',
+            paymentStatus: 'pending',
+            paymentMethod: order.paymentMethod,
+            utrNumber: order.utrNumber ?? null,
+            $or: [
+              { inventoryStatus: 'reserved' },
+              { inventoryStatus: { $exists: false } }
+            ],
+            $and: [
+              { $or: [{ inventoryExpiresAt: { $lte: now } }, { inventoryExpiresAt: { $exists: false }, createdAt: { $lte: legacyExpiry } }] }
+            ]
+          }, {
+            $set: {
+              status: 'Cancelled',
+              paymentStatus: paymentNeedsReview ? 'refund_pending' : 'failed',
+              inventoryStatus: 'released',
+              inventoryExpiresAt: null,
+              refundRequired: paymentNeedsReview,
+              cancelledBy: 'system',
+              cancelReason: paymentNeedsReview ? 'UPI reference submitted before reservation expiry; manual payment reconciliation required' : 'Payment reservation expired'
+            },
+            $push: { statusHistory: { status: 'Cancelled', note: paymentNeedsReview ? 'Reservation expired with submitted UPI reference; payment needs reconciliation' : 'Auto-cancelled: payment reservation expired', time: now } }
+          }, { new: true, session })
+          if (cancelled) await releaseInventory(cancelled.items, cancelled._id, session, 'cancellation')
+        })
+      } finally {
+        await session.endSession()
+      }
+
+      if (cancelled) {
+        await notifyStatusUpdate(cancelled)
+        logger.info('Expired payment reservation released', { orderId: cancelled._id, orderNumber: cancelled.orderNumber })
+      }
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(`Cron error: ${message}`)
+    logger.error('Payment reservation expiry job failed', {
+      errorName: error instanceof Error ? error.name : 'UnknownError'
+    })
   }
 })
 
-app.listen(PORT, () => {
-  const otpMode = otpConfig.isProduction
-    ? `Production (${otpService.providerName})`
-    : 'Development (Console Only)'
+mongoose.connection.on('disconnected', () => {
+  logger.warn('MongoDB connection was lost', { database: config.dbName })
+})
+mongoose.connection.on('error', (error: Error) => {
+  logger.error('MongoDB connection error', { errorName: error.name })
+})
 
+const httpServer = app.listen(PORT, () => {
   console.log('========================================')
   console.log(`Environment : ${config.nodeEnv}`)
   console.log(`Database    : ${config.dbName}`)
@@ -159,7 +167,6 @@ app.listen(PORT, () => {
   console.log('MongoDB     : Connected')
   console.log('Seed        : Disabled')
   console.log(`CORS Origins : ${config.corsOrigins.join(', ') || 'none'}`)
-  console.log(`OTP Mode    : ${otpMode}`)
   console.log('========================================')
 
   logger.info('Server startup complete', {
@@ -171,3 +178,37 @@ app.listen(PORT, () => {
     logFile: logger.logFileName
   })
 })
+
+let shutdownStarted = false
+const shutdown = (signal: NodeJS.Signals): void => {
+  if (shutdownStarted) return
+  shutdownStarted = true
+  logger.info('Graceful shutdown started', { signal })
+  expiryTask.stop()
+
+  const forceExitTimer = setTimeout(() => {
+    logger.error('Graceful shutdown timed out; forcing process exit')
+    process.exit(1)
+  }, 15000)
+  forceExitTimer.unref()
+
+  httpServer.close((error?: Error) => {
+    if (error) {
+      logger.error('HTTP server shutdown failed', { errorName: error.name })
+      process.exitCode = 1
+    }
+    void mongoose.disconnect().then(() => {
+      clearTimeout(forceExitTimer)
+      logger.info('Graceful shutdown completed')
+    }).catch((disconnectError: unknown) => {
+      clearTimeout(forceExitTimer)
+      logger.error('MongoDB shutdown failed', {
+        errorName: disconnectError instanceof Error ? disconnectError.name : 'UnknownError'
+      })
+      process.exitCode = 1
+    })
+  })
+}
+
+process.once('SIGINT', () => shutdown('SIGINT'))
+process.once('SIGTERM', () => shutdown('SIGTERM'))

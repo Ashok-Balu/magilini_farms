@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx watch src/bootstrap.ts",
-    "test": "cross-env NODE_ENV=test tsx src/bootstrap.ts",
+    "test": "cross-env NODE_ENV=test tsx --test \"tests/**/*.test.ts\"",
     "start": "cross-env NODE_ENV=production tsx src/bootstrap.ts",
     "prebuild": "npm install --include=dev",
     "build": "tsc -p tsconfig.json",
@@ -36,7 +36,6 @@
     "pdfkit": "^0.14.0",
     "razorpay": "^2.9.2",
     "slugify": "^1.6.6",
-    "twilio": "^4.20.0",
     "xss": "^1.0.15",
     "zod": "^4.4.3"
   },

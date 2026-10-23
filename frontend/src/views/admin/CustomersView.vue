@@ -45,11 +45,17 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/lib/api.js'
+import { useToastStore } from '@/stores/index.js'
+const toast = useToastStore()
 const customers = ref([]); const loading = ref(true); const search = ref(''); const total = ref(0); const page = ref(1); const limit = 20; const totalPages = ref(1)
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
 let t; const debouncedLoad = () => { clearTimeout(t); t=setTimeout(load,400) }
-const load = async () => { loading.value=true; try { const {data}=await api.get('/admin/customers',{params:{search:search.value,page:page.value,limit}}); customers.value=data.customers; total.value=data.total; totalPages.value=Math.ceil((data.total||0)/limit)||1 } finally { loading.value=false } }
+const load = async () => { loading.value=true; try { const {data}=await api.get('/admin/customers',{params:{search:search.value,page:page.value,limit}}); customers.value=data.customers; total.value=data.total; totalPages.value=Math.ceil((data.total||0)/limit)||1 } catch { toast.error('Failed to load customers.') } finally { loading.value=false } }
 const goPage = (p) => { page.value = p; load() }
-const toggleBlock = async (c) => { await api.patch(`/admin/customers/${c._id}/block`); await load() }
+const toggleBlock = async (c) => {
+  const isBlocked = !c.isBlocked
+  try { await api.patch(`/admin/customers/${c._id}/block`, { isBlocked }); await load(); toast.success(`Customer ${isBlocked ? 'blocked' : 'unblocked'}.`) }
+  catch (err) { toast.error(err.response?.data?.message || 'Failed to update customer.') }
+}
 onMounted(load)
 </script>

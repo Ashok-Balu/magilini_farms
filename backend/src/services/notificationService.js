@@ -1,133 +1,136 @@
-import twilio from 'twilio'
 import axios from 'axios'
-import { otpConfig } from '../config/otp.js'
+import { NotificationDelivery } from '../models/index.js'
 
-const hasTwilioConfig = () => Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER)
-
-const getTwilioClient = () => {
-  if (!hasTwilioConfig()) return null
-  return twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+export const sendSMS = async (phone, message) => {
+  console.log('SMS simulated.')
+  return true
 }
 
-// ── SMS via Twilio (Phase 1 OTP) ──────────────────────────
-export const sendSMS = async (phone, message) => {
-  const twilioClient = getTwilioClient()
-  if (!twilioClient) {
-    console.log(`OTP for ${phone}: ${message.match(/\d{4}/)?.[0] || '1234'}`)
+const notificationError = (error) => {
+  const status = Number(error?.response?.status)
+  return Number.isInteger(status) ? `WhatsApp provider returned HTTP ${status}.` : 'WhatsApp provider request failed.'
+}
+
+const dispatchWAMessage = async (delivery) => {
+  const claimed = await NotificationDelivery.findOneAndUpdate(
+    { _id: delivery._id, status: { $in: ['pending', 'failed'] } },
+    { $set: { status: 'sending', lastError: null }, $inc: { attempts: 1 } },
+    { new: true }
+  )
+  if (!claimed) return false
+
+  const simulate = process.env.NODE_ENV !== 'production' && process.env.ENABLE_REAL_NOTIFICATIONS !== 'true'
+  if (simulate) {
+    await NotificationDelivery.updateOne(
+      { _id: claimed._id, status: 'sending' },
+      { $set: { status: 'simulated', sentAt: new Date(), lastError: null } }
+    )
+    console.log(`WhatsApp simulated -> ${claimed.templateName}`)
     return true
   }
 
-  try {
-    await twilioClient.messages.create({
-      body: message,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to:   `+91${phone}`
-    })
-    console.log(`✅ SMS sent to ${phone}`)
-    return true
-  } catch (err) {
-    console.error(`❌ SMS failed: ${err?.message || err}`)
-    // Log Twilio-specific error details when available to aid debugging
-    try {
-      console.error('Twilio error details:', {
-        code: err?.code,
-        status: err?.status,
-        moreInfo: err?.moreInfo,
-        response: err?.response?.body || undefined
-      })
-    } catch (logErr) {
-      console.error('Failed to log Twilio error details', logErr)
-    }
+  if (!process.env.WA_API_KEY || !process.env.WA_API_URL) {
+    await NotificationDelivery.updateOne(
+      { _id: claimed._id, status: 'sending' },
+      { $set: { status: 'failed', lastError: 'WhatsApp provider is not configured.', sentAt: null } }
+    )
+    console.error('WhatsApp not sent: WA_API_KEY and WA_API_URL are required.')
     return false
   }
-}
 
-// ── WhatsApp Business API (Phase 2) ───────────────────────
-export const sendWAMessage = async (phone, templateName, params = []) => {
-  // Phase 1: Skip if API key not configured
-  if (!process.env.WA_API_KEY) {
-    console.log(`📱 WA (Phase1 — manual): ${phone} → ${templateName}`)
-    return true
-  }
   try {
     await axios.post(process.env.WA_API_URL, {
       countryCode: '+91',
-      phoneNumber: phone,
+      phoneNumber: claimed.recipient,
       callbackData: 'order-update',
       type: 'Template',
-      template: { name: templateName, languageCode: 'en', bodyValues: params }
+      template: { name: claimed.templateName, languageCode: 'en', bodyValues: claimed.params }
     }, {
-      headers: { Authorization: `Basic ${process.env.WA_API_KEY}`, 'Content-Type': 'application/json' }
+      headers: { Authorization: `Basic ${process.env.WA_API_KEY}`, 'Content-Type': 'application/json' },
+      timeout: 10000
     })
-    console.log(`✅ WA sent to ${phone}`)
+    await NotificationDelivery.updateOne(
+      { _id: claimed._id, status: 'sending' },
+      { $set: { status: 'delivered', sentAt: new Date(), lastError: null } }
+    )
     return true
-  } catch (err) {
-    console.error(`❌ WA failed: ${err.message}`)
+  } catch (error) {
+    const message = notificationError(error)
+    await NotificationDelivery.updateOne(
+      { _id: claimed._id, status: 'sending' },
+      { $set: { status: 'failed', lastError: message, sentAt: null } }
+    )
+    console.error(`WhatsApp delivery failed: ${message}`)
     return false
   }
 }
 
-// ── Send OTP ──────────────────────────────────────────────
-export const sendOTP = async (phone, otp) => {
-  if (otpConfig.isDevelopment) {
-    console.log(`🔐 DEV OTP: ${phone} → ${otp}`)
-    return true
-  }
-
-  if (!hasTwilioConfig()) {
-    console.log(`📱 OTP (fallback to console): ${phone} → ${otp}`)
-    return true
-  }
-
-  const message = `Your MagiliniFarms OTP is ${otp}. Valid for 10 minutes. Do not share with anyone.`
-  return sendSMS(phone, message)
+export const sendWAMessage = async (phone, templateName, params = [], { orderNumber } = {}) => {
+  const delivery = await NotificationDelivery.create({
+    channel: 'whatsapp',
+    recipient: String(phone || ''),
+    templateName,
+    params: params.map(String),
+    orderNumber
+  })
+  return dispatchWAMessage(delivery)
 }
 
-// ── Order Notifications ───────────────────────────────────
+export const retryWAMessage = async (deliveryId) => {
+  const delivery = await NotificationDelivery.findById(deliveryId)
+  if (!delivery) return null
+  if (delivery.status !== 'failed') return { delivery, sent: false, reason: 'Only failed notifications can be retried.' }
+  const sent = await dispatchWAMessage(delivery)
+  const updated = await NotificationDelivery.findById(delivery._id)
+  return { delivery: updated, sent, reason: sent ? undefined : 'Notification delivery failed.' }
+}
+
 export const notifyOrderPlaced = async (order) => {
-  const items = order.items.map(i => `• ${i.name} ${i.weight} × ${i.qty}`).join('\n')
-  const msg   = `✅ Order Confirmed!\nOrder ID: ${order.orderNumber}\n\n${items}\n\nTotal: ₹${order.total}\nPayment: ${order.paymentMethod}\n\nThank you for ordering from MagiliniFarms! 🥭`
+  const customerSent = await sendWAMessage(
+    order.customer.phone,
+    'order_received',
+    [order.orderNumber, String(order.total)],
+    { orderNumber: order.orderNumber }
+  )
 
-  // Notify customer
-  await sendWAMessage(order.customer.phone, 'order_confirmed', [order.orderNumber, String(order.total)])
-
-  // Notify admin
-  const adminMsg = `🛒 New Order!\n${order.orderNumber}\n${order.customer.name} — ${order.customer.phone}\nTotal: ₹${order.total}\nType: ${order.deliveryType}\nPayment: ${order.paymentMethod}`
+  const adminMsg = `New Order!\n${order.orderNumber}\n${order.customer.name} — ${order.customer.phone}\nTotal: ₹${order.total}\nType: ${order.deliveryType}\nPayment: ${order.paymentMethod}`
   await sendSMS(process.env.ADMIN_WA_NUMBER?.replace('91', ''), adminMsg)
-
-  return true
+  return customerSent
 }
 
 export const notifyStatusUpdate = async (order) => {
   const messages = {
-    Confirmed:     `✅ Your MagiliniFarms order ${order.orderNumber} is confirmed! We are preparing your fresh mangoes. 🥭`,
-    Packed:        `📦 Your order ${order.orderNumber} is packed and ready for dispatch!`,
-    Shipped:       `🚚 Your order ${order.orderNumber} is on the way!${order.courierTracking ? ` Track: ${order.courierName} #${order.courierTracking}` : ''}`,
-    Delivered:     `🎉 Your order ${order.orderNumber} has been delivered! Enjoy your fresh mangoes! 🥭`,
-    'Pickup-Ready':  `🏪 Your order ${order.orderNumber} is ready for pickup! Come to our farm between 7am–6pm. Bring your Order ID.`,
-    'Picked-Up':     `✅ Order ${order.orderNumber} picked up. Thank you! Enjoy your mangoes 🥭`,
-    Cancelled:     `❌ Your order ${order.orderNumber} has been cancelled. Contact us on WhatsApp for assistance.`
+    Confirmed: 'Your order is confirmed and being prepared.',
+    Packed: 'Your order is packed and ready for dispatch.',
+    Shipped: `Your order is on the way.${order.courierTracking ? ` Track: ${order.courierName} #${order.courierTracking}` : ''}`,
+    Delivered: 'Your order has been delivered. Enjoy!',
+    'Pickup-Ready': 'Your order is ready for pickup.',
+    'Picked-Up': 'Your order has been picked up. Thank you!',
+    Cancelled: 'Your order has been cancelled. Contact support for assistance.'
   }
-  const msg = messages[order.status]
-  if (msg) await sendWAMessage(order.customer.phone, `status_${order.status.toLowerCase()}`, [order.orderNumber])
+  if (!messages[order.status]) return false
+  return sendWAMessage(
+    order.customer.phone,
+    `status_${order.status.toLowerCase()}`,
+    [order.orderNumber],
+    { orderNumber: order.orderNumber }
+  )
 }
 
 export const notifyLowStock = async (productName, weight, stock) => {
-  const msg = `⚠️ Low Stock Alert!\n${productName} (${weight}): only ${stock} units left.\nUpdate stock in admin panel.`
-  await sendSMS(process.env.ADMIN_WA_NUMBER?.replace('91', ''), msg)
+  const msg = `Low Stock Alert!\n${productName} (${weight}): only ${stock} units left.`
+  return sendSMS(process.env.ADMIN_WA_NUMBER?.replace('91', ''), msg)
 }
 
 export const notifyComplaintReceived = async (complaint) => {
-  const msg = `📸 New Damage Complaint!\n${complaint.complaintNumber}\nOrder: ${complaint.orderId}\nPhone: ${complaint.phone}\nCheck admin panel.`
-  await sendSMS(process.env.ADMIN_WA_NUMBER?.replace('91', ''), msg)
+  const msg = `New Damage Complaint!\n${complaint.complaintNumber}\nOrder: ${complaint.orderId}\nPhone: ${complaint.phone}`
+  return sendSMS(process.env.ADMIN_WA_NUMBER?.replace('91', ''), msg)
 }
 
 export const notifyBulkEnquiry = async (enquiry) => {
-  const msg = `📋 New Bulk Enquiry!\n${enquiry.name} — ${enquiry.phone}\nVariety: ${enquiry.variety}\nQty: ${enquiry.quantity}\nCity: ${enquiry.city}`
-  await sendSMS(process.env.ADMIN_WA_NUMBER?.replace('91', ''), msg)
+  const msg = `New Bulk Enquiry!\n${enquiry.name} — ${enquiry.phone}\nVariety: ${enquiry.variety}\nQty: ${enquiry.quantity}\nCity: ${enquiry.city}`
+  return sendSMS(process.env.ADMIN_WA_NUMBER?.replace('91', ''), msg)
 }
 
-export const notifySeasonAvailable = async (phone, productName) => {
-  await sendWAMessage(phone, 'season_available', [productName])
-}
-
+export const notifySeasonAvailable = async (phone, productName) =>
+  sendWAMessage(phone, 'season_available', [productName])

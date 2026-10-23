@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import crypto from 'crypto'
 
 const orderItemSchema = new mongoose.Schema({
   productId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
@@ -11,9 +12,14 @@ const orderItemSchema = new mongoose.Schema({
 }, { _id: false })
 
 const addressSchema = new mongoose.Schema({
-  line1:    String, line2: String,
-  city:     String, state: String,
-  pincode:  String, landmark: String
+  fullName: { type: String, required: true, trim: true },
+  phone:    { type: String, required: true, trim: true, match: /^[6-9]\d{9}$/ },
+  line1:    { type: String, required: true },
+  line2:    String,
+  city:     { type: String, required: true },
+  state:    { type: String, required: true },
+  pincode:  { type: String, required: true, match: /^[1-9]\d{5}$/ },
+  landmark: String
 }, { _id: false })
 
 const statusHistorySchema = new mongoose.Schema({
@@ -27,6 +33,8 @@ const statusHistorySchema = new mongoose.Schema({
 const orderSchema = new mongoose.Schema({
   orderNumber:  { type: String, unique: true },
   userId:       { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  idempotencyKey: { type: String },
+  requestHash: { type: String },
 
   customer: {
     name:     { type: String, required: true },
@@ -65,10 +73,17 @@ const orderSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'paid', 'failed'],
+    enum: ['pending', 'paid', 'failed', 'refund_pending', 'refunded', 'refund_failed'],
     default: 'pending'
   },
+  inventoryStatus: {
+    type: String,
+    enum: ['reserved', 'committed', 'released']
+  },
+  inventoryExpiresAt: { type: Date },
+  refundRequired: { type: Boolean, default: false },
   razorpayOrderId:   { type: String },
+  paymentAttemptSequence: { type: Number, default: 0 },
   razorpayPaymentId: { type: String },
   razorpaySignature: { type: String },
   utrNumber:         { type: String },
@@ -93,11 +108,14 @@ const orderSchema = new mongoose.Schema({
   cancelReason:  { type: String }
 }, { timestamps: true })
 
-// Auto generate order number before save
+orderSchema.index(
+  { userId: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } }
+)
+
 orderSchema.pre('save', async function(next) {
   if (!this.orderNumber) {
-    const count = await mongoose.model('Order').countDocuments()
-    this.orderNumber = `NM-${String(count + 1).padStart(6, '0')}`
+    this.orderNumber = `NM-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
   }
   next()
 })

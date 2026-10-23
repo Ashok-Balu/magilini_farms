@@ -2,7 +2,7 @@
 <template>
   <div>
     <AppNavbar/>
-    <div class="page-hero mt-[68px]"><h1>Return Policy</h1><p>All sales final — fresh perishable produce</p></div>
+    <div class="page-hero mt-[60px] sm:mt-[68px]"><h1>Return Policy</h1><p>All sales final — fresh perishable produce</p></div>
     <div class="max-w-2xl mx-auto px-6 py-16">
       <div class="bg-red-50 border border-red-200 rounded-2xl p-6 mb-8 text-center">
         <div class="text-4xl mb-3">⚠️</div>

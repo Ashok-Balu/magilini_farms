@@ -21,9 +21,23 @@ export const protect = async (req, res, next) => {
     if (!token) return res.status(401).json(errorResponse('Unauthorized', ['JWT token is missing.']))
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    if (req.cookies?.token && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      const origin = req.headers.origin
+      const allowedOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '')
+        .split(',')
+        .map(value => value.trim().replace(/\/+$/, ''))
+        .filter(Boolean)
+      if (!origin || !allowedOrigins.includes(origin.replace(/\/+$/, ''))) {
+        return res.status(403).json(errorResponse('Forbidden', ['Request origin is not allowed.']))
+      }
+    }
+
     const user    = await User.findById(decoded.id).select('-__v')
     if (!user)          return res.status(401).json(errorResponse('Unauthorized', ['User not found.']))
     if (user.isBlocked) return res.status(403).json(errorResponse('Forbidden', ['Your account has been blocked.']))
+    if ((decoded.sessionVersion ?? 0) !== (user.authVersion ?? 0)) {
+      return res.status(401).json(errorResponse('Unauthorized', ['Session has been revoked.']))
+    }
 
     req.user = user
     next()
@@ -32,51 +46,19 @@ export const protect = async (req, res, next) => {
   }
 }
 
-export const allowSessionOrVerification = async (req, res, next) => {
+export const optionalAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization?.startsWith('Bearer ')
-      ? req.headers.authorization.split(' ')[1]
-      : undefined
-
-    let token = req.cookies?.token || authHeader
-    let verificationToken = req.cookies?.otp_ticket
-
-    if (!verificationToken && authHeader && authHeader !== req.cookies?.token) {
-      verificationToken = authHeader
+    let token = req.cookies?.token
+    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1]
     }
-
     if (token) {
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET)
-        const user = await User.findById(decoded.id).select('-__v')
-        if (user) {
-          if (user.isBlocked) {
-            return res.status(403).json({ success: false, message: 'Your account has been blocked. Please contact support.' })
-          }
-          req.user = user
-          req.authMode = 'session'
-          return next()
-        }
-      } catch {
-        // Ignore stale/invalid session token for this route and fall back to otp_ticket.
-      }
+      const decoded = jwt.verify(token, process.env.JWT_SECRET)
+      const user = await User.findById(decoded.id).select('-__v')
+      if (user && !user.isBlocked && (decoded.sessionVersion ?? 0) === (user.authVersion ?? 0)) req.user = user
     }
-
-    if (!verificationToken) {
-      return res.status(401).json(errorResponse('Unauthorized', ['Authentication required. Please login.']))
-    }
-
-    const decoded = jwt.verify(verificationToken, process.env.JWT_SECRET)
-    if (decoded.purpose !== 'otp_profile' || !decoded.phone) {
-      return res.status(401).json(errorResponse('Unauthorized', ['Verification session expired. Please request a new OTP.']))
-    }
-
-    req.pendingAuth = { phone: String(decoded.phone) }
-    req.authMode = 'verification'
-    next()
-  } catch (err) {
-    return res.status(401).json(errorResponse('Unauthorized', ['Invalid or expired session. Please login again.']))
-  }
+  } catch {}
+  next()
 }
 
 export const adminOnly = (req, res, next) => {
@@ -100,8 +82,8 @@ export const authMiddleware = protect
 export const adminMiddleware = [protect, adminOnly]
 export const customerMiddleware = [protect, customerOnly]
 
-export const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' })
+export const generateToken = (userId, sessionVersion = 0) => {
+  return jwt.sign({ id: userId, sessionVersion }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' })
 }
 
 export const setTokenCookie = (res, token) => {
@@ -116,23 +98,6 @@ export const setTokenCookie = (res, token) => {
   }
 }
 
-export const setVerificationCookie = (res, token) => {
-  res.cookie('otp_ticket', token, {
-    ...cookieBaseOptions,
-    maxAge: 10 * 60 * 1000
-  })
-  try {
-    logger.info('Set verification cookie', { cookie: 'otp_ticket', secure: cookieBaseOptions.secure, sameSite: cookieBaseOptions.sameSite })
-  } catch (err) {
-    // ignore logging failures
-  }
-}
-
 export const clearAuthCookies = (res) => {
   res.clearCookie('token', cookieBaseOptions)
-  res.clearCookie('otp_ticket', cookieBaseOptions)
-}
-
-export const clearVerificationCookie = (res) => {
-  res.clearCookie('otp_ticket', cookieBaseOptions)
 }

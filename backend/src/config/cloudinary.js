@@ -5,7 +5,8 @@ import multer from 'multer'
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  timeout: 30000
 })
 
 // Product images storage
@@ -23,6 +24,7 @@ const complaintStorage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder:         'magilini-farms/complaints',
+    type:           'authenticated',
     allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
     transformation: [{ width: 1200, quality: 'auto' }]
   }
@@ -31,4 +33,3 @@ const complaintStorage = new CloudinaryStorage({
 export const uploadProductImages  = multer({ storage: productStorage,  limits: { fileSize: 5 * 1024 * 1024, files: 5 } })
 export const uploadComplaintPhotos = multer({ storage: complaintStorage, limits: { fileSize: 5 * 1024 * 1024, files: 3 } })
 export { cloudinary }
-

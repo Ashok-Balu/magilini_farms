@@ -40,9 +40,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/lib/api.js'
+import { useToastStore } from '@/stores/index.js'
+const toast = useToastStore()
 const enquiries = ref([]); const loading = ref(true)
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN')
-const load = async () => { loading.value=true; try { const {data}=await api.get('/admin/bulk-enquiries'); enquiries.value=data.enquiries } finally { loading.value=false } }
-const updateStatus = async (id,status) => { await api.patch(`/admin/bulk-enquiries/${id}`,{status}) }
+const load = async () => { loading.value=true; try { const {data}=await api.get('/admin/bulk-enquiries'); enquiries.value=data.enquiries } catch { toast.error('Failed to load bulk enquiries.') } finally { loading.value=false } }
+const updateStatus = async (id,status) => {
+  try { await api.patch(`/admin/bulk-enquiries/${id}`,{status}); toast.success('Enquiry status updated.') }
+  catch (err) { toast.error(err.response?.data?.message || 'Failed to update enquiry.') }
+}
 onMounted(load)
 </script>

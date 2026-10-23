@@ -12,6 +12,5 @@ frontend/.env
 backend/.env.development
 backend/.env.production
 backend/.env.test
-backend/.env.example
 # OS files
 .DS_Store

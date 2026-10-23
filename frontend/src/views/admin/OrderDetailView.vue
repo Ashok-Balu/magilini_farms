@@ -63,10 +63,28 @@
           <h3 class="font-semibold mb-1">Actions</h3>
           <a :href="waLink" target="_blank" class="btn btn-wa w-full btn-sm">💬 WhatsApp Customer</a>
           <button @click="downloadInvoice" class="btn btn-ghost w-full btn-sm">⬇ Download Invoice</button>
-          <div v-if="order.paymentMethod==='direct-upi'&&order.paymentStatus==='pending'" class="border border-amber-200 rounded-xl p-3">
-            <div class="text-xs font-semibold text-amber-700 mb-2">Confirm UPI Payment</div>
-            <input v-model="upiRef" class="form-input text-xs mb-2" placeholder="UPI transaction reference"/>
-            <button @click="confirmUPI" class="btn btn-primary w-full btn-sm text-xs">Confirm Payment</button>
+          <div v-if="['direct-upi','pay-at-farm'].includes(order.paymentMethod)&&order.paymentStatus==='pending'&&order.status==='New'" class="border border-amber-200 rounded-xl p-3">
+            <div class="text-xs font-semibold text-amber-700 mb-2">{{ order.paymentMethod==='direct-upi' ? 'Confirm UPI Payment' : 'Record Collection Payment' }}</div>
+            <input v-if="order.paymentMethod==='direct-upi'" v-model="upiRef" class="form-input text-xs mb-2" placeholder="UPI transaction reference"/>
+            <button @click="confirmUPI" class="btn btn-primary w-full btn-sm text-xs">{{ order.paymentMethod==='direct-upi' ? 'Confirm Payment' : 'Record Payment' }}</button>
+          </div>
+          <div v-if="order.refundRequired" class="border border-red-200 rounded-lg bg-red-50 p-3 space-y-2">
+            <div class="text-xs font-semibold text-red-800">Refund requires reconciliation</div>
+            <input v-if="['direct-upi','pay-at-farm'].includes(order.paymentMethod)" v-model="refundReference" class="form-input text-xs" placeholder="Manual refund bank reference"/>
+            <template v-else>
+              <input v-model="gatewayRefundId" class="form-input text-xs" placeholder="Existing Razorpay refund ID, if any"/>
+              <input v-if="gatewayRefundId" v-model="providerPaymentId" class="form-input text-xs" placeholder="Related Razorpay payment ID"/>
+            </template>
+            <button @click="processRefund" :disabled="processingRefund" class="btn btn-primary w-full btn-sm text-xs">
+              {{ processingRefund ? 'Processing…' : ['direct-upi','pay-at-farm'].includes(order.paymentMethod) ? 'Record Manual Refund' : gatewayRefundId ? 'Reconcile Gateway Refund' : 'Process / Refresh Refund' }}
+            </button>
+          </div>
+          <div v-if="order.paymentTransactions?.length" class="border-t border-gray-100 pt-3">
+            <h4 class="text-xs font-semibold mb-2">Payment records</h4>
+            <div v-for="transaction in order.paymentTransactions" :key="transaction._id" class="text-xs text-gray-600 py-1">
+              {{ transaction.provider }} · {{ transaction.status }} · refund {{ transaction.refundStatus }}
+              <span v-if="transaction.providerPaymentId"> · {{ transaction.providerPaymentId }}</span>
+            </div>
           </div>
         </div>
 
@@ -104,6 +122,10 @@ const statusNote = ref('')
 const courierName = ref('')
 const courierTracking = ref('')
 const upiRef   = ref('')
+const refundReference = ref('')
+const gatewayRefundId = ref('')
+const providerPaymentId = ref('')
+const processingRefund = ref(false)
 const updating = ref(false)
 const updateMsg = ref('')
 
@@ -136,7 +158,7 @@ const updateStatus = async () => {
 }
 
 const confirmUPI = async () => {
-  if (!String(upiRef.value || '').trim()) {
+  if (order.value.paymentMethod === 'direct-upi' && !String(upiRef.value || '').trim()) {
     toast.error('UTR number is required to confirm payment.')
     return
   }
@@ -146,6 +168,29 @@ const confirmUPI = async () => {
     await loadOrder()
   } catch (err) {
     toast.error(err.response?.data?.message || 'Failed to confirm payment.')
+  }
+}
+
+const processRefund = async () => {
+  if (processingRefund.value) return
+  if (['direct-upi', 'pay-at-farm'].includes(order.value.paymentMethod) && !refundReference.value.trim()) {
+    toast.error('Enter the bank refund reference before recording the refund.')
+    return
+  }
+  processingRefund.value = true
+  try {
+    const { data } = await api.post(`/admin/orders/${order.value._id}/refund`, {
+      refundReference: refundReference.value.trim() || undefined,
+      refundId: gatewayRefundId.value.trim() || undefined,
+      providerPaymentId: providerPaymentId.value.trim() || undefined
+    })
+    order.value = data.order
+    toast.success(data.message || 'Refund state updated.')
+    await loadOrder()
+  } catch (err) {
+    toast.error(err.response?.data?.message || 'Could not update refund state.')
+  } finally {
+    processingRefund.value = false
   }
 }
 

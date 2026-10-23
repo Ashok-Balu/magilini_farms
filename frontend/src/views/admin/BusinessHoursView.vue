@@ -29,19 +29,23 @@
           </div>
         </div>
       </div>
-      <button @click="save" :disabled="saving" class="btn btn-primary w-full">{{ saving?'Saving...':'Save Hours' }}</button>
-      <p v-if="savedMsg" class="text-green text-sm text-center">{{ savedMsg }}</p>
+      <button @click="save" :disabled="saving" class="btn btn-primary w-full">
+        <span v-if="saving" class="spinner"></span>{{ saving?'Saving…':'Save Hours' }}
+      </button>
     </div>
   </div>
 </template>
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/lib/api.js'
-const hours = ref([]); const saving = ref(false); const savedMsg = ref('')
-const load = async () => { const {data}=await api.get('/business-hours'); hours.value=data.hours }
+import { useToastStore } from '@/stores/index.js'
+const toast = useToastStore()
+const hours = ref([]); const saving = ref(false)
+const load = async () => { try { const {data}=await api.get('/business-hours'); hours.value=data.hours } catch { toast.error('Failed to load business hours.') } }
 const save = async () => {
   saving.value=true
-  try { await api.patch('/admin/business-hours',{hours:hours.value}); savedMsg.value='✅ Saved!'; setTimeout(()=>savedMsg.value='',3000) }
+  try { await api.patch('/admin/business-hours',{hours:hours.value}); toast.success('Business hours saved!') }
+  catch (err) { toast.error(err.response?.data?.message || 'Failed to save business hours.') }
   finally { saving.value=false }
 }
 onMounted(load)
